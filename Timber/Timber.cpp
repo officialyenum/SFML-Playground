@@ -127,14 +127,59 @@ int main()
     // Time
     Clock clock;
 
+    // Time Bar
+    RectangleShape timeBar;
+    float timeBarStartWidth{ 400 };
+    float timeBarHeight{ 80 };
+    
+    timeBar.setSize({ timeBarStartWidth, timeBarHeight });
+    timeBar.setFillColor(Color::Red);
+    timeBar.setPosition({ (1920 / 2) - timeBarStartWidth / 2, 980 });
+    Time gameTimeTotal;
+    float timeRemaining{ 6.0f };
+    float timeBarWidthPerSecond = timeBarStartWidth / timeRemaining;
+
     bool bPaused{ true };
 
+    // Generate Random Branches
     updateBranches(1);
     updateBranches(2);
     updateBranches(3);
     updateBranches(4);
     updateBranches(5);
     updateBranches(6);
+
+    // Prepare the Player
+    Texture texturePlayer("graphics/player.png");
+    Sprite spritePlayer(texturePlayer);
+    spritePlayer.setPosition({ 580, 720 });
+
+    //The Player should start on the left
+    side playerSide = side::LEFT;
+
+    // Prepare the gravestone
+    Texture textureRIP("graphics/rip.png");
+    Sprite spriteRIP(textureRIP);
+    spriteRIP.setPosition({ 600, 860 });
+
+    // Prepare the Axe
+    Texture textureAxe("graphics/axe.png");
+    Sprite spriteAxe(textureAxe);
+    spriteAxe.setPosition({ 700, 830 });
+    //line Axe with tree
+    const float AXE_POSITION_LEFT = 700;
+    const float AXE_POSITION_RIGHT = 1075;
+
+    //Prepare the flying log
+    Texture textureLog("graphics/log.png");
+    Sprite spriteLog(textureLog);
+    spriteLog.setPosition({ 810, 720 });
+    bool bLogActive{ false };
+    float logSpeedX{ 1000 };
+    float logSpeedY{ -1500 };
+
+    //Player Control input
+    bool bAcceptInput{ false };
 
     while (window.isOpen())
     {
@@ -144,6 +189,24 @@ int main()
             // Measure Time
             Time dt = clock.restart();
 
+            // Subtract from  time remaining
+            timeRemaining -= dt.asSeconds();
+            // size up time bar
+            timeBar.setSize({ timeBarWidthPerSecond * timeRemaining, timeBarHeight });
+
+            if (timeRemaining <= 0.f)
+            {
+                //Pause Game
+                bPaused = true;
+                // change message to out of time
+                messageText.setString("Out Of Time!!");
+
+
+                //Reposition the text based on its new size
+                FloatRect textRect = messageText.getLocalBounds();
+                messageText.setOrigin(textRect.getCenter());
+                messageText.setPosition({ 1920 / 2, 1080 / 2 });
+            }
             if (!bBeeActive)
             {
                 // How Fast is the bee?
@@ -269,16 +332,24 @@ int main()
                 }
             }
         }
-        if (Keyboard::isKeyPressed(Keyboard::Key::Enter))
-        {
-            bPaused = false;
-        }
+        /*
+        * Handle Input Area
+        */
         if (Keyboard::isKeyPressed(Keyboard::Key::Escape))
         {
             window.close();
         }
+        if (Keyboard::isKeyPressed(Keyboard::Key::Enter))
+        {
+            bPaused = false;
+            score = 0;
+            timeRemaining = 6;
+        }
         window.clear();
 
+        /*
+        * Draw Sprite Area
+        */
         window.draw(spriteBg); // draw Background
 
         window.draw(spriteCloud1); // draw cloud 1
@@ -290,12 +361,17 @@ int main()
             window.draw(branch);
 
         window.draw(spriteTree); // draw Tree
+        window.draw(spritePlayer); // draw Player
+        window.draw(spriteAxe); // draw Axe
+        window.draw(spriteLog); // draw Log
+        window.draw(spriteRIP); // draw Gravestone
         window.draw(spriteBee); // draw Bee
         
         /** 
          UI
         */
         window.draw(scoreText); // Draw Score Text UI
+        window.draw(timeBar); // Draw Time Bar UI
         if (bPaused)
         {
             window.draw(messageText); // Draw Message Text UI

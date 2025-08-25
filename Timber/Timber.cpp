@@ -6,17 +6,22 @@
 #include <array>
 #include <sstream>      // std::stringstream
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
+#include <deque>
 
 using namespace sf;
 using namespace std;
 
 
 const int NUM_BRANCHES = 6;
+const int NUM_CLOUDS = 3;
 //Player Location
 enum class side { LEFT, RIGHT, NONE };
 
 vector<Sprite> branches;
 vector<side> branchPositions(NUM_BRANCHES, side::NONE);
+bool showFPS{ false };
+
 
 //Function Declaration
 void updateBranches(int seed)
@@ -77,23 +82,22 @@ int main()
     bool bBeeActive{ false };
     float beeSpeed{ 0.0f };
 
-    // Make Three Clouds
-    Texture textureCloud("graphics/cloud.png");//Load Texture from file path
+    //Prepare Three Clouds
+    vector<Sprite> clouds;
+    clouds.reserve(NUM_CLOUDS);
+    vector<bool> cloudsActive;
+    cloudsActive.resize(NUM_CLOUDS, false);
+    vector<float> cloudSpeed;
+    cloudSpeed.resize(NUM_CLOUDS, 0.0f);
+    Texture textureCloud("graphics/cloud.png");
 
-    Sprite spriteCloud1(textureCloud); // Create Cloud Sprite using loaded texture
-    spriteCloud1.setPosition({ 0,0 }); // Set position
-    bool bCloud1Active{ false };
-    float cloud1Speed{ 0.0f };
-
-    Sprite spriteCloud2(textureCloud); // Create Cloud Sprite using loaded texture
-    spriteCloud2.setPosition({ 0,150 }); // Set position
-    bool bCloud2Active{ false };
-    float cloud2Speed{ 0.0f };
-
-    Sprite spriteCloud3(textureCloud); // Create Cloud Sprite using loaded texture
-    spriteCloud3.setPosition({ 0,300 }); // Set position
-    bool bCloud3Active{ false };
-    float cloud3Speed{ 0.0f };
+    for (int i = 0; i < NUM_CLOUDS; i++)
+    {
+        
+        //Set the texture for each cloud sprite
+        clouds.emplace_back(textureCloud);  // construct Sprite with texture
+        clouds[i].setPosition({ 0, i * 150.0f });
+    }
     
     // Game Parameters
     // Score
@@ -102,6 +106,33 @@ int main()
     scoreText.setFillColor(Color::White);
     int score = 0;
 
+    FloatRect scoreTextBounds = scoreText.getLocalBounds();
+    RectangleShape scoreBackground({ scoreTextBounds.size.x + 40, scoreTextBounds.size.y + 40 });
+    scoreBackground.setFillColor(Color::Black);
+    scoreBackground.setPosition({ 20, 20 });
+    scoreText.setPosition({
+        scoreBackground.getPosition().x + 10,
+        scoreBackground.getPosition().y + 10 });
+
+    // FPS 
+    Text fpsText(font, "FPS = 120.0", 75);
+    fpsText.setFillColor(Color::White);
+    FloatRect fpsTextBounds = fpsText.getLocalBounds();
+    RectangleShape fpsBackground({ fpsTextBounds.size.x + 40, fpsTextBounds.size.y + 40 });
+    if (showFPS)
+    {
+        fpsBackground.setFillColor(Color::Black);
+        fpsBackground.setPosition({
+            1920.0f - fpsTextBounds.size.x - 20, 
+            20});
+        fpsText.setPosition({
+            fpsBackground.getPosition().x + 10 - fpsTextBounds.position.x, 
+            fpsBackground.getPosition().y + 10
+            });
+    }
+
+
+    // Message
     Text messageText(font, "Press Enter To Start!", 100);
     messageText.setFillColor(Color::White);
 
@@ -109,7 +140,6 @@ int main()
     messageText.setOrigin({ textRect.getCenter()});
     messageText.setPosition({ 1920 / 2.0f, 1080 / 2.0f });
 
-    scoreText.setPosition({ 20, 20 });
 
     //Prepare 5 branches
     vector<Sprite> branches;
@@ -125,7 +155,10 @@ int main()
     }
     
     // Time
-    Clock clock;
+    Clock clock; 
+    const int SAMPLE_COUNT = 100;               // average over last 100 frames
+    std::deque<float> frameTimes;               // store deltaTimes
+    float fps = 0.0f;
 
     // Time Bar
     RectangleShape timeBar;
@@ -181,16 +214,26 @@ int main()
     //Player Control input
     bool bAcceptInput{ false };
 
+    // Sound Declaration
+    // Chop Sound
+    SoundBuffer chopBuffer("sound/chop.wav"); 
+    Sound chopSound(chopBuffer);
+    // Death Sound
+    SoundBuffer deathBuffer("sound/death.wav");
+    Sound deathSound(deathBuffer);
+    // Out of Time Sound
+    SoundBuffer outOfTimeBuffer("sound/out_of_time.wav");
+    Sound outOfTimeSound(outOfTimeBuffer);
+
     while (window.isOpen())
     {
+        // --- Smoothed FPS ---
+        float dt = clock.restart().asSeconds();
         if (!bPaused)
         {
-            
             // Measure Time
-            Time dt = clock.restart();
-
             // Subtract from  time remaining
-            timeRemaining -= dt.asSeconds();
+            timeRemaining -= dt;
             // size up time bar
             timeBar.setSize({ timeBarWidthPerSecond * timeRemaining, timeBarHeight });
 
@@ -206,6 +249,8 @@ int main()
                 FloatRect textRect = messageText.getLocalBounds();
                 messageText.setOrigin(textRect.getCenter());
                 messageText.setPosition({ 1920 / 2, 1080 / 2 });
+                //Play Out Of Time Sound
+                outOfTimeSound.play();
             }
             if (!bBeeActive)
             {
@@ -223,7 +268,7 @@ int main()
             {
                 // Move the bee
                 spriteBee.setPosition({
-                    spriteBee.getPosition().x - (beeSpeed * dt.asSeconds()),
+                    spriteBee.getPosition().x - (beeSpeed * dt),
                     spriteBee.getPosition().y
                     });
                 if (spriteBee.getPosition().x < -100.f)
@@ -232,86 +277,33 @@ int main()
                 }
 
             }
+
             // Manage the clouds
-            if (!bCloud1Active)
+            for (int i = 0; i < NUM_CLOUDS; i++)
             {
-                // How Fast is the cloud?
-                srand((int)time(0) * 10);
-                cloud1Speed = static_cast<float>((rand() % 200));
-
-                // How high is the cloud?
-                srand((int)time(0) * 10);
-                float height = static_cast<float>((rand() % 150));
-                spriteCloud1.setPosition({ -200.f, height });
-                bCloud1Active = true;
-            }
-            else
-            {
-                // Move the cloud
-                spriteCloud1.setPosition({
-                    spriteCloud1.getPosition().x + (cloud1Speed * dt.asSeconds()),
-                    spriteCloud1.getPosition().y
-                    });
-                if (spriteCloud1.getPosition().x > 1920.f)
+                if (!cloudsActive[i]) {
+                    // How Fast is the cloud?
+                    srand((int)time(0) * 10);
+                    cloudSpeed[i] = static_cast<float>((rand() % 200));
+                    // How high is the cloud?
+                    srand((int)time(0) * 10);
+                    float height = static_cast<float>((rand() % 150));
+                    clouds[i].setPosition({-200.f, height});
+                    cloudsActive[i] = true;
+                }
+                else
                 {
-                    bCloud1Active = false;
+                    // Move the cloud
+                    clouds[i].setPosition({
+                        clouds[i].getPosition().x + (cloudSpeed[i] * dt),
+                        clouds[i].getPosition().y
+                        });
+                    if (clouds[i].getPosition().x > 1920.f)
+                    {
+                        cloudsActive[i] = false;
+                    }
                 }
             }
-
-            if (!bCloud2Active)
-            {
-                // How Fast is the cloud?
-                srand((int)time(0) * 20);
-                cloud2Speed = static_cast<float>((rand() % 200));
-
-                // How high is the cloud?
-                srand((int)time(0) * 20);
-                float height = static_cast<float>((rand() % 300) - 150);
-                spriteCloud2.setPosition({ -200.f, height });
-                bCloud2Active = true;
-            }
-            else
-            {
-                // Move the cloud
-                spriteCloud2.setPosition({
-                    spriteCloud2.getPosition().x + (cloud2Speed * dt.asSeconds()),
-                    spriteCloud2.getPosition().y
-                    });
-                if (spriteCloud2.getPosition().x > 1920.f)
-                {
-                    bCloud2Active = false;
-                }
-            }
-
-            if (!bCloud3Active)
-            {
-                // How Fast is the cloud?
-                srand((int)time(0) * 30);
-                cloud3Speed = static_cast<float>((rand() % 200));
-
-                // How high is the cloud?
-                srand((int)time(0) * 30);
-                float height = static_cast<float>((rand() % 450) - 150);
-                spriteCloud3.setPosition({ -200.f, height });
-                bCloud3Active = true;
-            }
-            else
-            {
-                // Move the cloud
-                spriteCloud3.setPosition({
-                    spriteCloud3.getPosition().x + (cloud3Speed * dt.asSeconds()),
-                    spriteCloud3.getPosition().y
-                    });
-                if (spriteCloud3.getPosition().x > 1920.f)
-                {
-                    bCloud3Active = false;
-                }
-            }
-
-            // Update the score text
-            stringstream ss;
-            ss << "Score = " << score;
-            scoreText.setString(ss.str());
 
             for (int i = 0; i < NUM_BRANCHES; i++)
             {
@@ -331,30 +323,178 @@ int main()
                     branches[i].setPosition({ 3000, height });
                 }
             }
+
+            /*
+            Handle Flying Log
+            */
+            if (bLogActive)
+            {
+                spriteLog.setPosition({ 
+                    spriteLog.getPosition().x + logSpeedX * dt,  
+                    spriteLog.getPosition().y + logSpeedY * dt });
+
+                // Has Log reached the right hand edge?
+                if (spriteLog.getPosition().x < -100 || spriteLog.getPosition().y > 2000)
+                {
+                    bLogActive = false;
+                    spriteLog.setPosition({ 810, 720 });
+                }
+            }
+
+            /*
+                Handle death
+            */
+            if (branchPositions[5] == playerSide) {
+                bPaused = true;
+                bAcceptInput = false;
+
+                //Draw the Gravestone
+                spriteRIP.setPosition({525, 760});
+                //Hide the player
+                spritePlayer.setPosition({ 2000, 660 });
+
+                //Change Text of Message
+                messageText.setString("SQUISHED!!!");
+
+
+                //Center it on the Screen
+                FloatRect textRect = messageText.getLocalBounds();
+                messageText.setOrigin(textRect.getCenter());
+
+                messageText.setPosition({ 1920 / 2, 1080 / 2 });
+                //Play Death Sound
+                deathSound.play();
+            }
+        }
+        
+        /* Handle Event Area */
+        while (const optional event = window.pollEvent())
+        {
+            if (event->is<Event::Closed>())
+            {
+                window.close();
+            }
+            else if (const auto* keyPressed = event->getIf<Event::KeyPressed>())
+            {
+                /*
+                * Handle Keypressed Event Input Area
+                */
+                if (keyPressed->scancode == Keyboard::Scancode::Escape)
+                    window.close();
+            }
+            else if (const auto* keyReleased = event->getIf<Event::KeyReleased>())
+            {
+                bAcceptInput = true;
+                // Hide sprite
+                spriteAxe.setPosition({ 2000, spriteAxe.getPosition().y });
+            }
         }
         /*
         * Handle Input Area
         */
-        if (Keyboard::isKeyPressed(Keyboard::Key::Escape))
-        {
-            window.close();
-        }
+        //if (Keyboard::isKeyPressed(Keyboard::Key::Escape))
+        //{
+        //    window.close();
+        //}
         if (Keyboard::isKeyPressed(Keyboard::Key::Enter))
         {
             bPaused = false;
             score = 0;
             timeRemaining = 6;
+
+            // Make all the branches disappear
+            for (int i = 0; i < NUM_BRANCHES; i++)
+            {
+                branchPositions[i] = side::NONE;
+            }
+            //Make sure gravestone is hidden
+            spriteRIP.setPosition({ 675, 2000 });
+            //Move Player into position
+            spritePlayer.setPosition({ 580, 720 });
+            bAcceptInput = true;
+            //chopSound.play();
+        }
+        // Check if game can accept gameplay input
+        if (bAcceptInput)
+        {
+            if (Keyboard::isKeyPressed(Keyboard::Key::Right))
+            {
+                //Play Chop Sound
+                chopSound.play();
+                playerSide = side::RIGHT;
+                score++;
+                timeRemaining += static_cast<float>((2 / score) + 0.15f);
+
+                spriteAxe.setPosition({ AXE_POSITION_RIGHT, spriteAxe.getPosition().y });
+                spritePlayer.setPosition({ 1200, 720 });
+                // update branches
+                updateBranches(score);
+
+                // set log flying to the left
+                spriteLog.setPosition({ 810, 720 });
+                logSpeedX = -5000;
+                bLogActive = true;
+
+                bAcceptInput = false;
+            }
+            //Handle the left cursor key
+            if (Keyboard::isKeyPressed(Keyboard::Key::Left))
+            {
+                //Play Chop Sound
+                chopSound.play();
+                playerSide = side::LEFT;
+                score++;
+                timeRemaining += static_cast<float>((2 / score) + 0.15f);
+
+                spriteAxe.setPosition({ AXE_POSITION_LEFT, spriteAxe.getPosition().y });
+                spritePlayer.setPosition({ 580, 720 });
+                // update branches
+                updateBranches(score);
+
+                // set log flying to the left
+                spriteLog.setPosition({ 810, 720 });
+                logSpeedX =  5000;
+                bLogActive = true;
+
+                bAcceptInput = false;
+            }
+            // Update the score text
+            stringstream ss;
+            ss << "Score = " << score;
+            scoreText.setString(ss.str());
         }
         window.clear();
+        
+        /*
+            Measure FPS
+        */
+        if (showFPS)
+        {
+            frameTimes.push_back(dt);
+            if (frameTimes.size() > SAMPLE_COUNT)
+                frameTimes.pop_front();
+            // Keep only last SAMPLE_COUNT values
+            if (frameTimes.size() > SAMPLE_COUNT)
+                frameTimes.pop_front();
 
+            // Compute average deltaTime
+            float avgDelta = 0.0f;
+            for (float dt : frameTimes)
+                avgDelta += dt;
+            avgDelta /= frameTimes.size();
+
+            // Compute FPS
+            fps = (avgDelta > 0) ? (1.0f / avgDelta) : 0.0f;
+            fpsText.setString("FPS: " + std::to_string(static_cast<int>(fps)));
+        }
         /*
         * Draw Sprite Area
         */
         window.draw(spriteBg); // draw Background
 
-        window.draw(spriteCloud1); // draw cloud 1
-        window.draw(spriteCloud2); // draw cloud 2
-        window.draw(spriteCloud3); // draw cloud 3
+        //draw clouds
+        for (auto& cloud : clouds)
+            window.draw(cloud);
 
         //draw branches
         for (auto& branch : branches)
@@ -370,7 +510,14 @@ int main()
         /** 
          UI
         */
+        window.draw(scoreBackground); // Draw Score Background UI
         window.draw(scoreText); // Draw Score Text UI
+        if (showFPS)
+        {
+            window.draw(fpsBackground); // Draw FPS Background UI
+            window.draw(fpsText); // Draw FPS Text UI
+        }
+
         window.draw(timeBar); // Draw Time Bar UI
         if (bPaused)
         {
